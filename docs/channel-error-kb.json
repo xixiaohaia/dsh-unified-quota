@@ -1,0 +1,162 @@
+{
+  "discoveredAt": "2026-11-16T18:23:21.178Z",
+  "sources": [
+    "DSH app.asar: dsh-llm/lib/index.js isQuotaExceededError",
+    "DSH app.asar: dsh-llm-pi-ai/lib/index.js classifyPiAiError",
+    "npm @dmh2002/dsh-connect-qoder 1.25.1 (index.js)",
+    "gitcode blog: WorkBuddy2API 熔断与冷却",
+    "forum.trae.cn / developer.aliyun.com / docs.cline.bot"
+  ],
+  "dshClassifier": {
+    "note": "DSH 对 pi-ai 失败按【文案正则】分类，顺序敏感",
+    "order": [
+      {
+        "pattern": "/\\b(?:401|403)\\b/",
+        "code": "AUTH",
+        "note": "最先命中，会吞掉配额错误"
+      },
+      {
+        "pattern": "isQuotaExceededError(message)",
+        "code": "QUOTA"
+      },
+      {
+        "pattern": "/\\b429\\b|rate.?limit/i",
+        "code": "RATE_LIMIT"
+      },
+      {
+        "pattern": "/\\b413\\b|payload too large/",
+        "code": "INVALID_REQUEST"
+      },
+      {
+        "pattern": "/\\b400\\b|invalid.?request/i",
+        "code": "INVALID_REQUEST"
+      },
+      {
+        "pattern": "/\\b5\\d\\d\\b/",
+        "code": "SERVER"
+      },
+      {
+        "pattern": "/\\btime(?:d)?\\s*out\\b|timeout/i",
+        "code": "TIMEOUT"
+      },
+      {
+        "pattern": "/stream ended (?:before|without)/",
+        "code": "TRANSPORT"
+      }
+    ],
+    "quotaPatterns": [
+      "/\\binsufficient[\\s_-]+(?:quota|balance|credits?)\\b/i",
+      "/\\b(?:quota|usage[\\s_-]+limit)[\\s_-]+(?:exceeded|exhausted|reached)\\b/i",
+      "/\\bexceed(?:ed|s)?[\\s_-]+(?:(?:your|the)[\\s_-]+)?(?:current[\\s_-]+)?quota\\b/i",
+      "/\\b(?:balance|credits?)[\\s_-]+(?:exhausted|depleted)\\b/i",
+      "/\\bout[\\s_-]+of[\\s_-]+(?:credits?|budget)\\b/i"
+    ],
+    "warning": "全部是英文模式 ⇒ 中文报错（如「所有账号均受限」）不会被 DSH 识别为 QUOTA"
+  },
+  "businessCodes": {
+    "6004": {
+      "kind": "model-quota",
+      "desc": "模型用量配额（body 带\"将在…重置\"）",
+      "cooldown": "对齐上游重置时刻"
+    },
+    "11102": {
+      "kind": "model-blocked",
+      "desc": "该后端无此模型",
+      "cooldown": "60s~10min"
+    },
+    "14003": {
+      "kind": "model-busy",
+      "desc": "模型繁忙（无恢复时刻）",
+      "cooldown": "10s~1min"
+    },
+    "14018": {
+      "kind": "hard-credit",
+      "desc": "积分耗尽（402 或 429+14018）",
+      "cooldown": "次日 04:00"
+    }
+  },
+  "observedMessages": [
+    {
+      "provider": "buddy",
+      "text": "本轮运行失败CodeBuddy (腾讯)：模型 deepseek-v4.1-flash 的可用账号均在限流中，最近一个将于 2026/11/16 13:57:30 解禁。可改用其它 provider / 模型，或等待解禁后再试（无需重新登录）。",
+      "hasUntil": true,
+      "verified": true
+    },
+    {
+      "provider": "buddy",
+      "text": "本轮运行失败 buddy: 模型 hy4flash-free 所有账号均受限，请稍后再试",
+      "hasUntil": false,
+      "verified": true
+    },
+    {
+      "provider": "qodercn",
+      "text": "您已达到配额使用上限，请升级订阅计划，以获得更多使用资源",
+      "hasUntil": false,
+      "verified": true,
+      "source": "aliyun 开发者社区"
+    },
+    {
+      "provider": "qodercn",
+      "text": "quota-exhausted / 当日用量已达上限",
+      "hasUntil": false,
+      "verified": true,
+      "source": "dsh-connect-qoder 源码"
+    },
+    {
+      "provider": "trae",
+      "text": "额度不够，需要重新订阅",
+      "hasUntil": false,
+      "verified": true,
+      "source": "forum.trae.cn"
+    },
+    {
+      "provider": "generic",
+      "text": "insufficient quota / usage limit exceeded / exceed current quota / credits exhausted / out of credits",
+      "hasUntil": false,
+      "verified": true,
+      "source": "DSH 官方英文模式"
+    },
+    {
+      "provider": "workbuddy",
+      "text": "使用量已超出频率限制，将在 … 重置",
+      "hasUntil": true,
+      "verified": true,
+      "source": "WorkBuddy2API"
+    }
+  ],
+  "strategy": {
+    "principle": "状态码优先于文案；模型级限流与账号级限流分开；重试绝不加重惩罚",
+    "tiers": [
+      {
+        "when": "402 或 429+14018",
+        "kind": "hard-credit",
+        "action": "硬冷却到次日 04:00"
+      },
+      {
+        "when": "429+6004/14003",
+        "kind": "model-rate",
+        "action": "模型级冷却，对齐重置时刻 / 10s~1min"
+      },
+      {
+        "when": "429（账号级）",
+        "kind": "account-rate",
+        "action": "对齐重置时刻 / 有界退避封顶 2h"
+      },
+      {
+        "when": "404/11102",
+        "kind": "model-missing",
+        "action": "60s~10min 负缓存"
+      },
+      {
+        "when": "5xx",
+        "kind": "server",
+        "action": "3 次熔断，30min 起翻倍封顶 6h"
+      },
+      {
+        "when": "未知 4xx",
+        "kind": "unknown",
+        "action": "只换号，5 连败降权 10min"
+      }
+    ]
+  }
+}
