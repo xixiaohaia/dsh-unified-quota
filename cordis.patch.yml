@@ -1,0 +1,5 @@
+# dsh-unified-quota bundle patch: mounts the host half; the browser half is
+# declared by package.json dsh.client (served at /plugins/<id>/client.js).
+- insert:
+    - id: unified-quota
+      name: 'dsh-unified-quota'
