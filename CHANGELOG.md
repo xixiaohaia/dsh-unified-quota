@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## 7.26.0 —— 素材与代码分离（GitHub 源安装可用）
+
+### 背景
+改为 `github:xixiaohaia/dsh-unified-quota` 源安装后，仓库含 6.6MB 素材导致
+codeload 下载超时（国内出口带宽受限）。**仓库瘦身为纯代码**：
+
+| 内容 | 大小 | 位置 |
+|---|---|---|
+| lib/ scripts/ test/ docs/ + 配置 | ~320KB | **GitHub 仓库** |
+| assets/whale-widget.js（挂件代码）| 1.1MB | **GitHub 仓库** |
+| 立绘/音效/气泡图（15 个媒体文件）| 5.5MB | **用户数据目录** |
+
+### 素材读取改为两级兜底
+```js
+const USER_ASSETS_DIR = path.join(STORAGE_DIR, 'whale-assets');
+function assetPath(file) {
+  const inPkg = path.join(ASSETS_DIR, file);
+  if (fsSync.existsSync(inPkg)) return inPkg;   // 包内优先
+  return path.join(USER_ASSETS_DIR, file);       // 用户目录兜底
+}
+```
+7 处素材读取点（音效组/自定义片段/静态图/角色兜底/气泡兜底）全部改用它。
+
+### 启动自动播种
+```js
+seedUserAssets();   // 包内有素材而用户目录缺 → 复制一份
+```
+**关键收益**：素材在用户数据目录，**插件更新不会覆盖/丢失立绘和音效**。
+
+### 修复过程中的一个严重 bug
+批量正则替换时把 `assetPath` 函数自身的 `path.join(ASSETS_DIR, file)`
+也替换成了 `assetPath(file)` ⇒ **无限递归**。已修正并加 import 验证。
+
+### 素材分发
+`whale-assets.tgz`（5MB）放坚果云，两台电脑**一次性**下载解压到
+`~/.dsh/storages/unified-quota/whale-assets/`，之后永久有效。
+
 ## 7.25.1 —— 版本更新提示（GitHub 检查）
 
 ### 用户需求
