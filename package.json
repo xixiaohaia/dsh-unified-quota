@@ -1,7 +1,7 @@
 {
   "name": "dsh-unified-quota",
   "description": "DSH 额度中心：官方余额 + 渠道积分 + 自有账本 + 多平台明细（筛选/口径/趋势/构成/排行/逐次调用/CSV/渠道展开）+ 积分倍率与等效量 + 设置页 + 每日实时汇率。",
-  "version": "7.26.1",
+  "version": "7.26.2",
   "type": "module",
   "main": "lib/index.js",
   "files": [
